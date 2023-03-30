@@ -1,6 +1,13 @@
-use sysinfo::{NetworkExt, NetworksExt, ProcessExt, System, SystemExt};
+use std::collections::HashMap;
+
+use sysinfo::{NetworkExt, NetworksExt, ProcessExt, System, SystemExt, DiskUsage, CpuExt};
 
 fn main() {
+    // test()
+    cpu()
+}
+
+fn test() {
     // Please note that we use "new_all" to ensure that all list of
     // components, network interfaces, disks and users are already
     // filled!
@@ -21,12 +28,6 @@ fn main() {
         println!("{}: {}/{} B", interface_name, data.received(), data.transmitted());
     }
 
-    // Components temperature:
-    println!("=> components:");
-    for component in sys.components() {
-        println!("{:?}", component);
-    }
-
     println!("=> system:");
     // RAM and swap information:
     println!("total memory: {} bytes", sys.total_memory());
@@ -43,8 +44,41 @@ fn main() {
     // Number of CPUs:
     println!("NB CPUs: {}", sys.cpus().len());
 
+    let mut map: HashMap<&str, DiskUsage> = HashMap::new();
     // Display processes ID, name na disk usage:
-    for (pid, process) in sys.processes() {
-        println!("[{}] {} {:?}", pid, process.name(), process.disk_usage());
+    for (_pid, process) in sys.processes() {
+        match map.get_mut(process.name()) {
+            Some(v) => {
+                let p = process.disk_usage();
+                v.read_bytes += p.read_bytes;
+                v.total_read_bytes += p.total_read_bytes;
+                v.written_bytes += p.written_bytes;
+            },
+            None => {
+                let p = process.disk_usage();
+                if p.read_bytes != 0 || p.total_written_bytes != 0 || p.written_bytes != 0 {
+                    map.insert(process.name(), p);
+                }
+            }, 
+        }
+        // println!("[{}] {} {:?}", pid, process.name(), process.disk_usage());
+    }
+
+    for (k, v) in map {
+        println!("process: {} disk usage -> total read bytes: {}, total writen bytes: {}", k, v.total_read_bytes, v.total_written_bytes);
+    }
+}
+
+fn cpu() {
+    let mut sys = System::new();
+
+    loop {
+        sys.refresh_cpu(); // Refreshing CPU information.
+        for cpu in sys.cpus() {
+            println!("{}: {}%", cpu.name(), cpu.cpu_usage());
+        }
+        // Sleeping for 500 ms to let time for the system to run for long
+        // enough to have useful information.
+        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 }
